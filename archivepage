@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+scroll_page(){
+    cat <<-EOF
+        function loadimages() {
+            setTimeout(function() {
+                images[i].scrollIntoView();
+                if(i++ < images.length) {
+                    loadimages(images);
+                }
+            }, 50)
+        }
+
+        let i = 0, images = document.getElementsByTagName('img');
+        loadimages(images);
+
+        let body = document.body,
+            html = document.documentElement;
+        let height = Math.max(body.scrollHeight, body.offsetHeight,
+            html.clientHeight, html.scrollHeight, html.offsetHeight);
+        return height;
+    EOF
+}
+
+{
+    trap -- 'killall chromedriver chromium; exit' ERR 0 1 2 3 6 13 14 15
+    ps -C chromedriver || setsid -f chromedriver
+    pushd "${HOME}/git/shellnium"
+    . lib/selenium.sh
+    # .lib/selenium.sh --headless
+    popd
+} &>/dev/null
+
+for url; do
+    echo "Screenshotting ${url}"
+    navigate_to "${url}"
+    page_height=$(exec_script "$(scroll_page)" | jq -r '.value')
+    until [[ $(exec_script "return ((window.innerHeight + window.scrollY) >= document.body.offsetHeight);" | jq -r '.value') == true ]]; do sleep 1; done
+    set_window_rect 0 0 1920 "${page_height}" &>/dev/null
+    screenshot "screenshot_$((i++)).png"
+done
