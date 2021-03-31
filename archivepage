@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 scroll_page(){
 	cat <<-EOF
-		let screenshot = document.createElement('div');
 		let waitload = new Promise(function(res) {
 			function loadimages() {
 				setTimeout(function() {
-					images[i].scrollIntoView();
+					if(typeof images[i] != 'undefined'){
+						images[i].scrollIntoView();
+					}
 					if(i++ < images.length) {
 						loadimages(images);
 					} else {
@@ -17,17 +18,21 @@ scroll_page(){
 			loadimages(images);
 		});
 
-		let body = document.body,
-			html = document.documentElement;
-		let height = Math.max(body.scrollHeight, body.offsetHeight,
-			html.clientHeight, html.scrollHeight, html.offsetHeight);
+		let body = document.body, html = document.documentElement;
+		let height = Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
 
 		waitload.then(function(){
-			loaded = true;
+			g = document.createElement('div');
+			g.setAttribute('id', 'screengrabber-pageisloaded');
+			document.body.appendChild(g);
 		});
 
 		return height;
 	EOF
+}
+
+page_loaded(){
+	[[ $(exec_script "if(document.getElementById('screengrabber-pageisloaded')) return true;" | jq -r '.value') == true ]]
 }
 
 trap -- 'killall chromedriver chromium; exit' ERR 0 1 2 3 6 13 14 15
@@ -43,8 +48,7 @@ for url; do
 	echo "Screenshotting ${url}"
 	navigate_to "${url}"
 	page_height=$(exec_script "$(scroll_page)" | jq -r '.value')
-	while true; do exec_script "return loaded;" | jq -r '.value'; done
-	until [[ $(exec_script "return ((window.innerHeight + window.scrollY) >= document.body.offsetHeight);" | jq -r '.value') == true ]]; do sleep 1; done
-	set_window_rect 0 0 1920 "${page_height}" &>/dev/null
+	until page_loaded; do sleep 1; done
+	set_window_rect 0 0 1920 "${page_height}"
 	screenshot "screenshot_$((i++)).png"
 done
